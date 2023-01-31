@@ -13,8 +13,8 @@ class Predictors:
         self.qtrData = self.setUpQuarterHourly()
         self.dailyData = self.setUpDaily()
 
-        self.quarterHourlyFlowAgainstLevel()
-        self.dailyLevelAgainstWaterDifference()
+        self.quarterHourlyFlowAgainstLevel(plotGraph=False, displayStats=False)
+        self.dailyLevelAgainstWaterDifference(plotGraph=False, displayStats=False)
 
     def setUpQuarterHourly(self):
         # Import the data
@@ -51,6 +51,23 @@ class Predictors:
         merged = merged.drop('Quality Code_y', axis=1)
         merged = merged.drop('Quality Code', axis=1)
         merged.dropna(inplace=True)
+        
+        # Calculate the water difference
+        merged['Water Difference (m3)'] = merged['Daily Precipitation (mm)']*45000 - merged['Mean Flow (m3/s)']*86400
+
+        # Calculate the level difference
+        levelDerivative = []
+        previous = merged['Mean Water Level (m)'][0]
+        flag = True
+        for i in merged['Mean Water Level (m)']:
+            diff = i - previous
+            if not flag:
+                levelDerivative.append(diff)
+            flag = False
+            previous = i
+        levelDerivative.append(0)
+        merged['level_derivative'] = levelDerivative
+
         return merged
 
     def quarterHourlyFlowAgainstLevel(self, plotGraph = False, displayStats = False):
@@ -76,9 +93,9 @@ class Predictors:
 
         # Plot the polynomial curve
         if plotGraph:
+            plt.scatter(X, y, label='data points', color='lightgray', marker='.')
             x = np.linspace(0.1, 3.5, 1000)
             y = lr.predict(quadratic.fit_transform(x.reshape(-1, 1)))
-            plt.scatter(X, y, label='data points', color='lightgray', marker='.')
             plt.plot(x, y, label='predicted', color='red')
             plt.legend(loc='upper left')
             plt.title('Regression of Flow Rate against Water Level')
@@ -90,7 +107,8 @@ class Predictors:
 
     def generateQuarterHourlyFlow(self, level):
         quadratic = PolynomialFeatures(degree=4)
-        return self.lr1.predict(quadratic.fit_transform(level.reshape(-1, 1)))
+        level = np.array(level).reshape(-1, 1)
+        return self.lr1.predict(quadratic.fit_transform(level))[0][0]
 
     def dailyLevelAgainstWaterDifference(self, plotGraph = False, displayStats = False):
         # Remove days with water difference > 2000000 and > 2000000
@@ -108,9 +126,9 @@ class Predictors:
         lr.fit(X_quad, y)
 
         # Calculate and display the mean squared error and R^2
-        y_quad_fit = lr.predict(X_quad)
+        y_quad_pred = lr.predict(X_quad_test)
         if displayStats:
-            y_quad_pred = lr.predict(X_quad_test)
+            y_quad_fit = lr.predict(X_quad)
             print('MSE train: %.3f, test: %.3f' % (
                 mean_squared_error(y, y_quad_fit),
                 mean_squared_error(y_test, y_quad_pred)))
@@ -144,6 +162,6 @@ class Predictors:
         
     def generateLevelDerivativeFromWaterDifference(self, waterDifference):
         quadratic = PolynomialFeatures(degree=1)
-
-        temp = self.lr2.predict(quadratic.fit_transform(waterDifference.reshape(-1, 1)))
+        waterDifference = np.array(waterDifference).reshape(-1, 1)
+        temp = self.lr2.predict(quadratic.fit_transform(waterDifference))[0][0]
         return random.gauss(temp, np.std(self.residuals2))
