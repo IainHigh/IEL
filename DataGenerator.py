@@ -3,18 +3,20 @@ import csv
 from enum import Enum
 from urllib.request import urlopen
 from DataGeneratorPredictors import Predictors
+from tqdm import tqdm
 
 class DataGenerator():
     
     def __init__(self,
                 numOfSamples : int = 100,
                 rainfall : list() = None, 
-                startingWaterLevel : float = 0.4,
+                startingWaterLevel : float = 0.45,
                 volumeOfWaterComingFromDamn: list() = None,
                 catchementArea: float = 58.5,
                 pollutants: list() = None,
                 property_flooding_level: float = 1.0,
-                low_lying_land_flooding_level: float = 1.0):
+                low_lying_land_flooding_level: float = 1.0,
+                predictors : Predictors = None):
         
         # Volume of water coming from damn is in m3/s
         # Flow rate is in m3/s
@@ -22,14 +24,19 @@ class DataGenerator():
         # Catchement area is in km2
         # Water level is in m
 
+        self.numOfSamples = numOfSamples # Number of quarter hourly samples we should generate
+
         # If the volume of water coming from the damn is not specified, set it to 0
         if volumeOfWaterComingFromDamn is None:
             volumeOfWaterComingFromDamn = [0.0] * numOfSamples
+        else:
+            self.volumeOfWaterComingFromDamn = volumeOfWaterComingFromDamn
 
-        self.predictors = Predictors()
+        if predictors is None:
+            self.predictors = Predictors()
+        else:
+            self.predictors = predictors
 
-        self.numOfSamples = numOfSamples # Number of quarter hourly samples we should generate
-        
         if rainfall is None:
             self.rainfall = self.read_rainfall_from_SEPA_api(samples = numOfSamples)
         else:
@@ -52,53 +59,67 @@ class DataGenerator():
 
             if quarterHourlyLevels is not None:
                 curWaterLevel = quarterHourlyLevels[i]
-
+    
         return flowRate
 
     def calculate_quarter_hourly_water_diff(self, flowRate):
         # Convert the mm of rainfall to m3/s
         # 1mm of precipitation per 15 minutes per km2 = 0.9m3/s * catchmentarea
         # However, only 72% of the water is actually available to the river
-        rainfallVol = [x * self.catchementArea * 0.9 * 0.72 for x in self.rainfall]
-        return [x + y - z for x, y, z in zip(self.volumeOfWaterComingFromDamn, rainfallVol, flowRate)]
+        rainMultiplier = 0.001 * 0.72 * self.catchementArea * 1000000
+        return [(y*rainMultiplier + (x - z)*900) for x, y, z in zip(self.volumeOfWaterComingFromDamn, self.rainfall, flowRate)]
 
     def calculateDailyWaterDifference(self, qtrHourlySamples):
         # 96 quarter-hourly samples per day
-        numOfDays = (self.numOfSamples // 96) if (self.numOfSamples % 96 == 0) else (self.numOfSamples // 96) + 1
-        samples = [0.0]*numOfDays
-        for i in range(numOfDays):
-            samples[i] = sum(qtrHourlySamples[i*96:(i+1)*96])
-            
-        return samples
+        return sum(qtrHourlySamples)
 
-    def calculateDailyLevelDerivative(self, dailyWaterDifference):
-        return self.predictors.generateLevelDerivativeFromWaterDifference(dailyWaterDifference)
+    def calculateDailyLevelDerivative(self, dailyWaterDifference, startingHeight):
+        predicted = self.predictors.generateLevelDerivativeFromWaterDifference(dailyWaterDifference)
+        if startingHeight + predicted < 0.2:
+            return 0.2 - startingHeight
+        return predicted
 
     def calculateQuarterHourlyLevelDerivative(self, dailyLevelDerivative, dailyWaterDifference, qtrHourlyWaterDifference):
-        numOfDays = (self.numOfSamples // 96) if (self.numOfSamples % 96 == 0) else (self.numOfSamples // 96) + 1
-        samples = [0.0]*self.numOfSamples
-        for i in range(numOfDays):
-            for j in range(96):
-                samples[i*96 + j] = (qtrHourlyWaterDifference[i*96] / dailyWaterDifference[i]) * dailyLevelDerivative[i]
-        return samples
+        if dailyWaterDifference == 0:
+            return [0.0]*96
+
+        return [(dailyLevelDerivative / 96)] * 96
+
+        # samples = [0.0]*96
+        # for j in range(96):
+        #     samples[j] = (qtrHourlyWaterDifference[j] / dailyWaterDifference) * dailyLevelDerivative
+        # return samples
 
     def calculateQuarterHourlyLevel(self, quarterHourlyLevelDerivative):
         level = [0.0]*len(quarterHourlyLevelDerivative)
         level[0] = self.startingWaterLevel
         for i in range(1, len(quarterHourlyLevelDerivative)):
-            level[i] = level[i-1] + quarterHourlyLevelDerivative[i]
+            if (level[i-1] + quarterHourlyLevelDerivative[i]) < 0:
+                level[i] = 0
+            else:
+                level[i] = level[i-1] + quarterHourlyLevelDerivative[i]
+                if level[i] > 4:
+                    level[i] = 4
         return level
 
-    def calculateWaterDifference(self, flowRate, rainfall, volumeOfWaterComingFromDamn):
-        return (volumeOfWaterComingFromDamn + sum(rainfall)) - sum(flowRate)
-
-    def write_to_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels, quarter_hourly_water_difference):
+    def write_to_qtrhrl_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels):
         # Write the rainfall, flow rate, water difference and water level to a csv file
-        f = open('test.csv', 'w')
+        f = open('Quarter_Hourly_Generated_Data.csv', 'w')
         writer = csv.writer(f)
-        writer.writerow(["Rainfall", "Flow Rate", "Water Difference", "Water Level"])
+        writer.writerow(["Rainfall", "Flow Rate", "Water Level"])
         for i in range(self.numOfSamples):
-            row = [self.rainfall[i], quarter_hourly_flow_rate[i], quarter_hourly_water_difference[i], quarter_hourly_levels[i]]
+            row = [self.rainfall[i], quarter_hourly_flow_rate[i], quarter_hourly_levels[i]]
+            writer.writerow(row)
+        f.close()
+
+    def write_to_day_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels):
+        samples = len(quarter_hourly_flow_rate)
+        numberOfDays = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
+        f = open('Daily_Generated_Data.csv', 'w')
+        writer = csv.writer(f)
+        writer.writerow(["Total Rainfall", "Average Flow Rate", "Average Water Level"])
+        for i in range(numberOfDays):
+            row = [sum(self.rainfall[i*96:(i+1)*96]), sum(quarter_hourly_flow_rate[i*96:(i+1)*96])/96, sum(quarter_hourly_levels[i*96:(i+1)*96])/96]
             writer.writerow(row)
         f.close()
 
@@ -123,8 +144,9 @@ class DataGenerator():
         
         response = urlopen(url)
         data_json = json.loads(response.read())
-
-        return [x[1] for x in data_json[0]["data"]][0:samples]
+        rainfallData = [x[1] for x in data_json[0]["data"]][0:samples]
+        assert len(rainfallData) == samples, "The number of samples returned from the SEPA API is not equal to the number of samples requested"
+        return rainfallData
 
 class eventEnum(Enum):
     STORM = 1
@@ -134,18 +156,37 @@ class eventEnum(Enum):
     BURST_DAM = 5
 
 if __name__ == "__main__":
-    # 96 samples = 24 hours
-    dg = DataGenerator(numOfSamples=96*4)
-    quarter_hourly_levels = None
 
-    for i in range(20):
-        quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(quarter_hourly_levels)
-        quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
-        daily_water_difference = dg.calculateDailyWaterDifference(quarter_hourly_water_difference)
-        daily_level_difference = [dg.calculateDailyLevelDerivative(x) for x in daily_water_difference]
-        quarter_hourly_level_difference = dg.calculateQuarterHourlyLevelDerivative(daily_level_difference, daily_water_difference, quarter_hourly_water_difference)
-        quarter_hourly_levels = dg.calculateQuarterHourlyLevel(quarter_hourly_level_difference)
+    print("1: Initialising ML Model")
+    samples = 96 * 100
+    number_of_days = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
+    predictor = Predictors()
+    rainfall = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_SEPA_api(samples = samples)
+    starting_height = 0.5
 
-    dg.write_to_csv(quarter_hourly_flow_rate, quarter_hourly_levels, quarter_hourly_water_difference)
+    all_flow_rates = []
+    all_levels = []
 
-    
+    print("2: Generating Data")
+    for i in tqdm(range(number_of_days)):
+        dg = DataGenerator(numOfSamples=96, rainfall=rainfall[i*96:(i+1)*96], startingWaterLevel=starting_height, predictors=predictor)
+        quarter_hourly_levels = None
+        # For each day
+        for i in range(10):
+            quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(quarter_hourly_levels)
+            quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
+            daily_water_difference = dg.calculateDailyWaterDifference(quarter_hourly_water_difference)
+            daily_level_difference = dg.calculateDailyLevelDerivative(daily_water_difference, starting_height)
+            quarter_hourly_level_difference = dg.calculateQuarterHourlyLevelDerivative(daily_level_difference, daily_water_difference, quarter_hourly_water_difference)
+            quarter_hourly_levels = dg.calculateQuarterHourlyLevel(quarter_hourly_level_difference)
+            quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(quarter_hourly_levels)
+
+        starting_height = quarter_hourly_levels[-1]
+        all_flow_rates += quarter_hourly_flow_rate
+        all_levels += quarter_hourly_levels
+
+    print("3: Writing Data to CSV")
+    dg = DataGenerator(numOfSamples=samples, rainfall=rainfall, predictors=predictor)
+    dg.write_to_qtrhrl_csv(all_flow_rates, all_levels)
+    dg.write_to_day_csv(all_flow_rates, all_levels)
+    print("4: Done")

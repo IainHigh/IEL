@@ -52,7 +52,7 @@ class Predictors:
         merged = merged.drop('Quality Code', axis=1)
         merged.dropna(inplace=True)
         
-        # Calculate the water difference
+        # Calculate the water difference TODO: Check this
         merged['Water Difference (m3)'] = merged['Daily Precipitation (mm)']*45000 - merged['Mean Flow (m3/s)']*86400
 
         # Calculate the level difference
@@ -71,10 +71,12 @@ class Predictors:
         return merged
 
     def quarterHourlyFlowAgainstLevel(self, plotGraph = False, displayStats = False):
-        X = self.qtrData['Water Level (m)'].values.reshape(-1, 1)
-        y = self.qtrData['Mean Flow (m3/s)'].values.reshape(-1, 1)
+        # Only use water levels between 0.2 and 2
+        normalRange = self.qtrData[(self.qtrData['Water Level (m)'] > 0.2) & (self.qtrData['Water Level (m)'] < 2)]
+        X = normalRange['Water Level (m)'].values.reshape(-1, 1)
+        y = normalRange['Mean Flow (m3/s)'].values.reshape(-1, 1)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
-        quadratic = PolynomialFeatures(degree=4)
+        quadratic = PolynomialFeatures(degree=3)
         X_quad = quadratic.fit_transform(X)
         X_quad_test = quadratic.fit_transform(X_test)
         lr = LinearRegression()
@@ -93,10 +95,28 @@ class Predictors:
 
         # Plot the polynomial curve
         if plotGraph:
+
+            # Plot the data points
+            X = self.qtrData['Water Level (m)'].values.reshape(-1, 1)
+            y = self.qtrData['Mean Flow (m3/s)'].values.reshape(-1, 1)
             plt.scatter(X, y, label='data points', color='lightgray', marker='.')
-            x = np.linspace(0.1, 3.5, 1000)
+            
+            # For low water levels, we will use a line
+            x = np.linspace(0, 0.2, 100)
+            y = x*0.5
+            plt.plot(x, y, label='predicted', color='red')
+
+            # For normal water levels, we will use the polynomial curve
+            x = np.linspace(0.2, 2, 1000)
             y = lr.predict(quadratic.fit_transform(x.reshape(-1, 1)))
             plt.plot(x, y, label='predicted', color='red')
+
+            # For high water levels, we will use a line
+            x = np.linspace(2, 4, 1000)
+            offset = 60 - lr.predict(quadratic.fit_transform(np.array(2).reshape(-1, 1)))[0][0]
+            y = x*30 - offset
+            plt.plot(x, y, label='predicted', color='red')
+
             plt.legend(loc='upper left')
             plt.title('Regression of Flow Rate against Water Level')
             plt.xlabel('Water Level (m)')
@@ -106,9 +126,23 @@ class Predictors:
         self.lr1 = lr
 
     def generateQuarterHourlyFlow(self, level):
-        quadratic = PolynomialFeatures(degree=4)
+        quadratic = PolynomialFeatures(degree=3)
+
+        if (level < 0):
+            return 0
+
+        if (level <= 0.2):
+            # If the level is below 0.2m, the flow rate is directly proportional to the level with tiny noise
+            return level*0.5
+
+        if (level >= 2):
+            # If the level is above 2m, the flow rate is directly proportional to the level with tiny noise
+            offset = 60 - self.lr1.predict(quadratic.fit_transform(np.array(2).reshape(-1, 1)))[0][0]
+            return level*30 - offset
+        
         level = np.array(level).reshape(-1, 1)
-        return self.lr1.predict(quadratic.fit_transform(level))[0][0]
+        temp = self.lr1.predict(quadratic.fit_transform(level))[0][0]
+        return temp
 
     def dailyLevelAgainstWaterDifference(self, plotGraph = False, displayStats = False):
         # Remove days with water difference > 2000000 and > 2000000
