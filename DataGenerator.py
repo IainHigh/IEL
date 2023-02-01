@@ -158,7 +158,7 @@ class eventEnum(Enum):
 if __name__ == "__main__":
 
     print("1: Initialising ML Model")
-    samples = 96 * 100
+    samples = 96 * 500
     number_of_days = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
     predictor = Predictors()
     rainfall = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_SEPA_api(samples = samples)
