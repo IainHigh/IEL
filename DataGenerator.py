@@ -109,7 +109,7 @@ class DataGenerator():
         f = open('Quarter_Hourly_Generated_Data.csv', 'w')
         writer = csv.writer(f)
         writer.writerow(["Rainfall", "Flow Rate", "Water Level"])
-        for i in range(self.numOfSamples):
+        for i in range(len(quarter_hourly_flow_rate)):
             row = [self.rainfall[i], quarter_hourly_flow_rate[i], quarter_hourly_levels[i]]
             writer.writerow(row)
         f.close()
@@ -117,7 +117,7 @@ class DataGenerator():
     def write_to_day_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels):
         # TODO: Round these values before writing to CSV
         samples = len(quarter_hourly_flow_rate)
-        numberOfDays = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
+        numberOfDays = samples // 96
         f = open('Daily_Generated_Data.csv', 'w')
         writer = csv.writer(f)
         writer.writerow(["Total Rainfall", "Average Flow Rate", "Average Water Level"])
@@ -128,7 +128,6 @@ class DataGenerator():
 
     def read_rainfall_from_SEPA_api(self, stationName : str = "Dippen", samples = 100):
         url = "https://timeseries.sepa.org.uk/KiWIS/KiWIS?service=kisters&type=queryServices&datasource=0&request=getTimeseriesList&station_name=" + stationName + "&format=json"
-  
         # store the response of URL
         response = urlopen(url)
   
@@ -142,14 +141,13 @@ class DataGenerator():
                 id = entry[3]
                 break
 
-        period = "P" + str((samples // 96) + 96) + "D"
+        number_of_days = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
+        period = "P" + str(number_of_days) + "D"
         url = "https://timeseries.sepa.org.uk/KiWIS/KiWIS?service=kisters&type=queryServices&datasource=0&request=getTimeseriesValues&ts_id=" + str(id) + "&period=" + period + "&returnfields=Timestamp,%20Value,%20Quality%20Code&format=json"
-        
         response = urlopen(url)
         data_json = json.loads(response.read())
         rainfallData = [x[1] for x in data_json[0]["data"]][0:samples]
-        assert len(rainfallData) == samples, "The number of samples returned from the SEPA API is not equal to the number of samples requested"
-        return rainfallData
+        return rainfallData, len(rainfallData)
 
 class eventEnum(Enum):
     STORM = 1
@@ -160,19 +158,20 @@ class eventEnum(Enum):
 
 if __name__ == "__main__":
 
-    numberOfDays = 200
-    assert numberOfDays < 9300 and numberOfDays > 0, "Number of days must be between 1 and 9300"
+    numberOfDays = 3125
+    assert numberOfDays <= 3125 and numberOfDays > 0, "Number of days must be between 1 and 3125"
 
     print("1: Initialising ML Model")
     samples = 96 * numberOfDays
-    number_of_days = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
     predictor = Predictors()
     print("2: Reading rainfall data from SEPA API")
-    rainfall = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_SEPA_api(samples = samples)
+    rainfall, samples = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_SEPA_api(samples = samples)
     starting_height = 0.5
 
     all_flow_rates = []
     all_levels = []
+
+    number_of_days = samples // 96
 
     print("3: Generating Data")
     for i in tqdm(range(number_of_days)):
