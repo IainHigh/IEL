@@ -4,6 +4,7 @@ from enum import Enum
 from urllib.request import urlopen
 from DataGeneratorPredictors import Predictors
 from tqdm import tqdm
+import random
 
 class DataGenerator():
     
@@ -83,7 +84,7 @@ class DataGenerator():
         if dailyWaterDifference == 0:
             return [0.0]*96
 
-        return [(dailyLevelDerivative / 96)] * 96
+        return [(dailyLevelDerivative / 96) + random.gauss(0, 0.005)] * 96
 
         # samples = [0.0]*96
         # for j in range(96):
@@ -103,6 +104,7 @@ class DataGenerator():
         return level
 
     def write_to_qtrhrl_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels):
+        # TODO: Round these values before writing to CSV
         # Write the rainfall, flow rate, water difference and water level to a csv file
         f = open('Quarter_Hourly_Generated_Data.csv', 'w')
         writer = csv.writer(f)
@@ -113,6 +115,7 @@ class DataGenerator():
         f.close()
 
     def write_to_day_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels):
+        # TODO: Round these values before writing to CSV
         samples = len(quarter_hourly_flow_rate)
         numberOfDays = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
         f = open('Daily_Generated_Data.csv', 'w')
@@ -139,7 +142,7 @@ class DataGenerator():
                 id = entry[3]
                 break
 
-        period = "P" + str((samples // 4) + 4) + "H"
+        period = "P" + str((samples // 96) + 96) + "D"
         url = "https://timeseries.sepa.org.uk/KiWIS/KiWIS?service=kisters&type=queryServices&datasource=0&request=getTimeseriesValues&ts_id=" + str(id) + "&period=" + period + "&returnfields=Timestamp,%20Value,%20Quality%20Code&format=json"
         
         response = urlopen(url)
@@ -157,23 +160,25 @@ class eventEnum(Enum):
 
 if __name__ == "__main__":
 
+    numberOfDays = 200
+    assert numberOfDays < 9300 and numberOfDays > 0, "Number of days must be between 1 and 9300"
+
     print("1: Initialising ML Model")
-    samples = 96 * 500
+    samples = 96 * numberOfDays
     number_of_days = (samples // 96) if (samples % 96 == 0) else (samples // 96) + 1
     predictor = Predictors()
+    print("2: Reading rainfall data from SEPA API")
     rainfall = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_SEPA_api(samples = samples)
     starting_height = 0.5
 
     all_flow_rates = []
     all_levels = []
 
-    print("2: Generating Data")
+    print("3: Generating Data")
     for i in tqdm(range(number_of_days)):
         dg = DataGenerator(numOfSamples=96, rainfall=rainfall[i*96:(i+1)*96], startingWaterLevel=starting_height, predictors=predictor)
-        quarter_hourly_levels = None
-        # For each day
+        quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(None)
         for i in range(10):
-            quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(quarter_hourly_levels)
             quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
             daily_water_difference = dg.calculateDailyWaterDifference(quarter_hourly_water_difference)
             daily_level_difference = dg.calculateDailyLevelDerivative(daily_water_difference, starting_height)
@@ -181,12 +186,16 @@ if __name__ == "__main__":
             quarter_hourly_levels = dg.calculateQuarterHourlyLevel(quarter_hourly_level_difference)
             quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(quarter_hourly_levels)
 
+        quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
+        daily_water_difference = dg.calculateDailyWaterDifference(quarter_hourly_water_difference)
+        daily_level_difference = quarter_hourly_levels[-1] - starting_height
+
         starting_height = quarter_hourly_levels[-1]
         all_flow_rates += quarter_hourly_flow_rate
         all_levels += quarter_hourly_levels
 
-    print("3: Writing Data to CSV")
+    print("4: Writing Data to CSV")
     dg = DataGenerator(numOfSamples=samples, rainfall=rainfall, predictors=predictor)
     dg.write_to_qtrhrl_csv(all_flow_rates, all_levels)
     dg.write_to_day_csv(all_flow_rates, all_levels)
-    print("4: Done")
+    print("5: Done")

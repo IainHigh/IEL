@@ -198,4 +198,4 @@ class Predictors:
         quadratic = PolynomialFeatures(degree=1)
         waterDifference = np.array(waterDifference).reshape(-1, 1)
         temp = self.lr2.predict(quadratic.fit_transform(waterDifference))[0][0]
-        return random.gauss(temp, np.std(self.residuals2))
+        return random.gauss(temp, np.std(self.residuals2))*2
