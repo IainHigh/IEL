@@ -38,11 +38,7 @@ class DataGenerator():
         else:
             self.predictors = predictors
 
-        if rainfall is None:
-            self.rainfall = self.read_rainfall_from_SEPA_api(samples = numOfSamples)
-        else:
-            self.rainfall = rainfall
-
+        self.rainfall = rainfall                                        # The rainfall in the river
         self.startingWaterLevel = startingWaterLevel                    # The starting water level of the river
         self.volumeOfWaterComingFromDamn = volumeOfWaterComingFromDamn  # The volume of water coming from the damn
         self.catchementArea = catchementArea                            # The area of the catchement
@@ -149,23 +145,31 @@ class DataGenerator():
         rainfallData = [x[1] for x in data_json[0]["data"]][0:samples]
         return rainfallData, len(rainfallData)
 
-class eventEnum(Enum):
-    STORM = 1
-    DROUGHT = 2
-    FREEZE = 3
-    FLOOD = 4
-    BURST_DAM = 5
+    def read_rainfall_from_csv(self, filename, samples):
+        rainfall = []
+        with open(filename, 'r') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter=';')
+            csvreader.__next__()
+            for row in csvreader:
+                if (row[1].isnumeric() == True):
+                    rainfall.append(float(row[1]))
+        return rainfall[0:samples]
+
 
 if __name__ == "__main__":
 
-    numberOfDays = 3125
+    numberOfDays = 1000
     assert numberOfDays <= 3125 and numberOfDays > 0, "Number of days must be between 1 and 3125"
 
     print("1: Initialising ML Model")
     samples = 96 * numberOfDays
     predictor = Predictors()
     print("2: Reading rainfall data from SEPA API")
-    rainfall, samples = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_SEPA_api(samples = samples)
+    try:
+        rainfall, samples = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_SEPA_api(samples = samples)
+    except:
+        rainfall = DataGenerator(numOfSamples=samples, predictors=predictor).read_rainfall_from_csv("/home/iain/Desktop/IEL/Data/Quater_Hourly_Readings/Quarter_Hourly_Precipitation.csv", samples = samples)
+    
     starting_height = 0.5
 
     all_flow_rates = []
@@ -177,17 +181,13 @@ if __name__ == "__main__":
     for i in tqdm(range(number_of_days)):
         dg = DataGenerator(numOfSamples=96, rainfall=rainfall[i*96:(i+1)*96], startingWaterLevel=starting_height, predictors=predictor)
         quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(None)
-        for i in range(10):
+        for i in range(2):
             quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
             daily_water_difference = dg.calculateDailyWaterDifference(quarter_hourly_water_difference)
             daily_level_difference = dg.calculateDailyLevelDerivative(daily_water_difference, starting_height)
             quarter_hourly_level_difference = dg.calculateQuarterHourlyLevelDerivative(daily_level_difference, daily_water_difference, quarter_hourly_water_difference)
             quarter_hourly_levels = dg.calculateQuarterHourlyLevel(quarter_hourly_level_difference)
             quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(quarter_hourly_levels)
-
-        quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
-        daily_water_difference = dg.calculateDailyWaterDifference(quarter_hourly_water_difference)
-        daily_level_difference = quarter_hourly_levels[-1] - starting_height
 
         starting_height = quarter_hourly_levels[-1]
         all_flow_rates += quarter_hourly_flow_rate
