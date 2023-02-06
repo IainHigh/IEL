@@ -6,13 +6,17 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import math
 
 class Predictors:
+    # This class will be used to store ML models and functions to generate data based on these models.
 
     def __init__(self):
+        # Read in the training data
         self.qtrData = self.setUpQuarterHourly()
         self.dailyData = self.setUpDaily()
 
+        # Generate the models
         self.quarterHourlyFlowAgainstLevel(plotGraph=False, displayStats=False)
         self.dailyLevelAgainstWaterDifference(plotGraph=False, displayStats=False)
 
@@ -52,8 +56,7 @@ class Predictors:
         merged = merged.drop('Quality Code', axis=1)
         merged.dropna(inplace=True)
         
-        # Calculate the water difference TODO: Check this
-        merged['Water Difference (m3)'] = merged['Daily Precipitation (mm)']*45000 - merged['Mean Flow (m3/s)']*86400
+        merged['Water Difference (m3)'] = merged['Daily Precipitation (mm)']*40452 - merged['Mean Flow (m3/s)']*86400
 
         # Calculate the level difference
         levelDerivative = []
@@ -71,6 +74,8 @@ class Predictors:
         return merged
 
     def quarterHourlyFlowAgainstLevel(self, plotGraph = False, displayStats = False):
+        # Use sklearn to fit a 3 degree polynomial curve to the water flow against water level data.
+
         # Only use water levels between 0.2 and 2
         normalRange = self.qtrData[(self.qtrData['Water Level (m)'] > 0.2) & (self.qtrData['Water Level (m)'] < 2)]
         X = normalRange['Water Level (m)'].values.reshape(-1, 1)
@@ -126,14 +131,16 @@ class Predictors:
         self.lr1 = lr
 
     def generateQuarterHourlyFlow(self, level):
+        # Given a level, use the polynomial curve to predict the flow rate.
+
         quadratic = PolynomialFeatures(degree=3)
 
-        if (level < 0):
-            return 0
-
         if (level <= 0.2):
-            # If the level is below 0.2m, the flow rate is directly proportional to the level with tiny noise
-            return level*0.5
+            # If the level is below 0.2m, then the ML model doesn't work. So just set flow to zero with tiny noise.
+            x = random.gauss(0, 0.01)
+            while (x < 0):
+                x = random.gauss(0, 0.01)
+            return x
 
         if (level >= 2):
             # If the level is above 2m, the flow rate is directly proportional to the level with tiny noise
@@ -145,6 +152,8 @@ class Predictors:
         return temp
 
     def dailyLevelAgainstWaterDifference(self, plotGraph = False, displayStats = False):
+        # Use sklearn to calculate the line of best fit for the water difference against the change in water level.
+
         # Remove days with water difference > 2000000 and > 2000000
         typical = self.dailyData[self.dailyData['Water Difference (m3)'] < 2000000]
         typical = typical[typical['Water Difference (m3)'] > -2000000]
@@ -187,15 +196,15 @@ class Predictors:
             plt.ylabel('Level Derivative (m)')
             plt.show()
 
-        # Calculate the standard deviation of the residuals
-        residuals = y_quad_pred - y_test
-        
-        # Return the linear regression model, the residuals and the X values
+        # Calculate the standard deviation to be used for the gaussian distribution
+        numerator = sum((y_quad_pred - y_test) * (y_quad_pred - y_test))
+        denominator = len(y_quad_pred) - 1
+        self.std = math.sqrt(numerator / denominator)
         self.lr2 = lr
-        self.residuals2 = residuals
         
     def generateLevelDerivativeFromWaterDifference(self, waterDifference):
+        # Given a water difference, use the ML model to estimate the change ini water level. Uses gaussian distribution for noise.
         quadratic = PolynomialFeatures(degree=1)
         waterDifference = np.array(waterDifference).reshape(-1, 1)
         temp = self.lr2.predict(quadratic.fit_transform(waterDifference))[0][0]
-        return random.gauss(temp, np.std(self.residuals2)) / 2
+        return random.gauss(temp, self.std)
