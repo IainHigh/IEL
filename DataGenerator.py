@@ -77,6 +77,16 @@ class DataGenerator():
 
         return predicted
 
+    def calculateQuarterHourlyLevelDifference(self, dailyLevelDifference, quarterHourlyWaterDifference):
+        quarter_hourly_water_difference = [0.0] * len(quarterHourlyWaterDifference)
+        temp = dailyLevelDifference / len(quarterHourlyWaterDifference)
+        totalWaterDifference = sum(quarterHourlyWaterDifference)
+        for i in range(len(quarterHourlyWaterDifference)):
+            ratio = quarterHourlyWaterDifference[i] / totalWaterDifference
+            quarter_hourly_water_difference[i] = (daily_level_difference * ratio) + random.gauss(0, 0.0001)
+
+        return quarter_hourly_water_difference
+
     def calculateQuarterHourlyLevel(self, quarterHourlyLevelDerivative):
         # Calculate the water level for each quarter-hourly sample.
         level = [0.0]*len(quarterHourlyLevelDerivative)
@@ -198,14 +208,14 @@ if __name__ == "__main__":
             quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
             daily_water_difference = sum(quarter_hourly_water_difference)
             daily_level_difference = dg.calculateDailyLevelDerivative(daily_water_difference, starting_height)
-            quarter_hourly_level_difference = [(daily_level_difference / 96) + random.gauss(0, 0.005)] * 96
+            quarter_hourly_level_difference = dg.calculateQuarterHourlyLevelDifference(daily_level_difference, quarter_hourly_water_difference)
             quarter_hourly_levels = dg.calculateQuarterHourlyLevel(quarter_hourly_level_difference)
             quarter_hourly_flow_rate = dg.calculate_quarter_hourly_flow_rate(quarter_hourly_levels)
 
         quarter_hourly_water_difference = dg.calculate_quarter_hourly_water_diff(quarter_hourly_flow_rate)
         daily_water_difference = sum(quarter_hourly_water_difference)
         daily_level_difference = quarter_hourly_levels[-1] - starting_height
-
+        
         starting_height = quarter_hourly_levels[-1]
         all_flow_rates += quarter_hourly_flow_rate
         all_levels += quarter_hourly_levels
