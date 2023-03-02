@@ -1,9 +1,10 @@
 import json
 import csv
+import pandas as pd
+import random
 from urllib.request import urlopen
 from DataGeneratorPredictors import Predictors
 from tqdm import tqdm
-import random
 
 class DataGenerator():
     
@@ -105,7 +106,7 @@ class DataGenerator():
 
     def write_to_qtrhrl_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels):
         # Write the rainfall, flow rate, water difference and water level to a csv file
-        f = open('Quarter_Hourly_Generated_Data.csv', 'w')
+        f = open('/home/iain/Desktop/IEL/Data/Generated Data/Quarter_Hourly_Generated_Data.csv', 'w')
         writer = csv.writer(f)
         writer.writerow(["Rainfall", "Flow Rate", "Water Level"])
         for i in range(len(quarter_hourly_flow_rate)):
@@ -117,9 +118,10 @@ class DataGenerator():
         # Write the rainfall, flow rate, water difference and water level to a csv file
         samples = len(quarter_hourly_flow_rate)
         numberOfDays = samples // 96
-        f = open('Daily_Generated_Data.csv', 'w')
+        f = open('/home/iain/Desktop/IEL/Data/Generated Data/Daily_Generated_Data.csv', 'w')
         writer = csv.writer(f)
-        writer.writerow(["Total Rainfall", "Average Flow Rate", "Average Water Level"])
+        # Rainfall is cumulative (total); Flow Rate and Water Levels are both mean values.
+        writer.writerow(["Rainfall", "Flow Rate", "Water Level"])
         for i in range(numberOfDays):
             precip = sum(self.rainfall[i*96:(i+1)*96])
             flow = sum(quarter_hourly_flow_rate[i*96:(i+1)*96])/96
@@ -153,24 +155,62 @@ class DataGenerator():
         return rainfallData, len(rainfallData)
 
     def read_rainfall_from_csv(self, filename, samples):
-        # Read the rainfall data from a predownloaded csv file. Useful if no internet connection is available.
+        # Read the rainfall data from a pre-downloaded CSV file. Useful if there's no internet connection available.
         rainfall = []
+        
         with open(filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter=';')
-            csvreader.__next__()
+            # Skip the header row
+            next(csvreader)
+            
+            # Read each row of data and extract the rainfall value
             for row in csvreader:
                 try:
-                    rainfall.append(float(row[1]))
-                except:
+                    rainfall_value = float(row[1])
+                    rainfall.append(rainfall_value)
+                except ValueError:
+                    # Skip rows that don't have valid rainfall data
                     pass
-        rainfall = rainfall[0:samples]
+                
+        # Truncate the data to the specified number of samples
+        rainfall = rainfall[:samples]
+        
+        # Return the data and its length
         return rainfall, len(rainfall)
+    
+    def simplifyData(self, csvFileName, outputFilePath):
+        # Read the data from the csv file and save to a pandas dataframe
+        df = pd.read_csv(csvFileName, sep=',')
 
+        # Calculate the bottom quartile and top quartile of the rainfall excluding where the rainfall is 0
+        temp = df[df['Rainfall'] != 0]
+        mean = temp['Rainfall'].mean()
+
+        # Calculate the bottom quartile and top quartile of the flow rate
+        bottomQuartileFlow = df['Flow Rate'].quantile(0.25)
+        topQuartileFlow = df['Flow Rate'].quantile(0.75)
+
+        # Calculate the bottom quartile and top quartile of the water level
+        bottomQuartileLevel = df['Water Level'].quantile(0.25)
+        topQuartileLevel = df['Water Level'].quantile(0.75)
+
+        # Create a new dataframe with simplified data:
+            # "Low" is used if the value is below the bottom quartile
+            # "Medium" is used if the value is between the bottom and top quartile
+            # "High" is used if the value is above the top quartile
+
+        df2 = pd.DataFrame(columns=['Rainfall', 'Flow Rate', 'Water Level'])
+        df2['Rainfall'] = df['Rainfall'].apply(lambda x: "Dry" if x == 0 else ("Light Rainfall" if x < mean else "Heavy Rainfall"))
+        df2['Flow Rate'] = df['Flow Rate'].apply(lambda x: "Slow" if x < bottomQuartileFlow else ("Steady" if x < topQuartileFlow else "Fast"))
+        df2['Water Level'] = df['Water Level'].apply(lambda x: "Low" if x < bottomQuartileLevel else ("Medium" if x < topQuartileLevel else "High"))
+
+        # Save the simplified data to a csv file
+        df2.to_csv(outputFilePath, index=False)     
 
 if __name__ == "__main__":
 
     # Number of days to generate data for. Must be between 1 and 3125.
-    numberOfDays = 3125
+    numberOfDays = 20
     samples = 96 * numberOfDays
     assert numberOfDays <= 3125 and numberOfDays > 0, "Number of days must be between 1 and 3125"
 
@@ -226,3 +266,6 @@ if __name__ == "__main__":
     dg.write_to_qtrhrl_csv(all_flow_rates, all_levels)
     dg.write_to_day_csv(all_flow_rates, all_levels)
     print("5: Done")
+
+    dg.simplifyData("/home/iain/Desktop/IEL/Data/Generated Data/Quarter_Hourly_Generated_Data.csv", "/home/iain/Desktop/IEL/Data/Generated Data/Simplified Generated Data/Simplified_Quarter_Hourly_Data.csv")
+    dg.simplifyData("/home/iain/Desktop/IEL/Data/Generated Data/Daily_Generated_Data.csv", "/home/iain/Desktop/IEL/Data/Generated Data/Simplified Generated Data/Simplified_Daily_Data.csv")
