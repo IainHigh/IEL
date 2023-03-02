@@ -22,11 +22,11 @@ class Predictors:
 
     def setUpQuarterHourly(self):
         # Import the data
-        flow = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter_Hourly_Flow_Rate.csv', delimiter=';')
+        flow = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter Hourly Flow Rate.csv', delimiter=';')
         flow.rename(columns={'Value': 'Mean Flow (m3/s)'}, inplace=True)
-        rain = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter_Hourly_Precipitation.csv', delimiter=';')
+        rain = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter Hourly Precipitation.csv', delimiter=';')
         rain.rename(columns={'Value': 'Precipitation (mm)'}, inplace=True)
-        level = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter_Hourly_Level.csv', delimiter=';')
+        level = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter Hourly Level.csv', delimiter=';')
         level.rename(columns={'Value': 'Water Level (m)'}, inplace=True)
 
         # Merge the data
@@ -41,11 +41,11 @@ class Predictors:
 
     def setUpDaily(self):
         # Import the new data and create a dataframe
-        daily_flow = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily_Mean_Flow_Rate.csv', delimiter=';')
+        daily_flow = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily Mean Flow Rate.csv', delimiter=';')
         daily_flow.rename(columns={'Value': 'Mean Flow (m3/s)'}, inplace=True)
-        daily_rain = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily_Precipitation.csv', delimiter=';')
+        daily_rain = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily Precipitation.csv', delimiter=';')
         daily_rain.rename(columns={'Value': 'Daily Precipitation (mm)'}, inplace=True)
-        daily_level = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily_Mean_Level.csv', delimiter=';')
+        daily_level = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily Mean Level.csv', delimiter=';')
         daily_level.rename(columns={'Value': 'Mean Water Level (m)'}, inplace=True)
 
         # Merge the 3 datasets into one

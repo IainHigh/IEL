@@ -106,9 +106,9 @@ class DataGenerator():
 
     def write_to_qtrhrl_csv(self, quarter_hourly_flow_rate, quarter_hourly_levels):
         # Write the rainfall, flow rate, water difference and water level to a csv file
-        f = open('/home/iain/Desktop/IEL/Data/Generated Data/Quarter_Hourly_Generated_Data.csv', 'w')
+        f = open('/home/iain/Desktop/IEL/Data/Generated Data/Quarter Hourly Generated Data.csv', 'w')
         writer = csv.writer(f)
-        writer.writerow(["Rainfall", "Flow Rate", "Water Level"])
+        writer.writerow(["Precipitation", "Flow Rate", "Water Level"])
         for i in range(len(quarter_hourly_flow_rate)):
             row = [round(self.rainfall[i], 1), round(quarter_hourly_flow_rate[i], 3), round(quarter_hourly_levels[i], 3)]
             writer.writerow(row)
@@ -118,10 +118,10 @@ class DataGenerator():
         # Write the rainfall, flow rate, water difference and water level to a csv file
         samples = len(quarter_hourly_flow_rate)
         numberOfDays = samples // 96
-        f = open('/home/iain/Desktop/IEL/Data/Generated Data/Daily_Generated_Data.csv', 'w')
+        f = open('/home/iain/Desktop/IEL/Data/Generated Data/Daily Generated Data.csv', 'w')
         writer = csv.writer(f)
         # Rainfall is cumulative (total); Flow Rate and Water Levels are both mean values.
-        writer.writerow(["Rainfall", "Flow Rate", "Water Level"])
+        writer.writerow(["Precipitation", "Flow Rate", "Water Level"])
         for i in range(numberOfDays):
             precip = sum(self.rainfall[i*96:(i+1)*96])
             flow = sum(quarter_hourly_flow_rate[i*96:(i+1)*96])/96
@@ -183,8 +183,8 @@ class DataGenerator():
         df = pd.read_csv(csvFileName, sep=',')
 
         # Calculate the bottom quartile and top quartile of the rainfall excluding where the rainfall is 0
-        temp = df[df['Rainfall'] != 0]
-        mean = temp['Rainfall'].mean()
+        temp = df[df['Precipitation'] != 0]
+        mean = temp['Precipitation'].mean()
 
         # Calculate the bottom quartile and top quartile of the flow rate
         bottomQuartileFlow = df['Flow Rate'].quantile(0.25)
@@ -199,8 +199,8 @@ class DataGenerator():
             # "Medium" is used if the value is between the bottom and top quartile
             # "High" is used if the value is above the top quartile
 
-        df2 = pd.DataFrame(columns=['Rainfall', 'Flow Rate', 'Water Level'])
-        df2['Rainfall'] = df['Rainfall'].apply(lambda x: "Dry" if x == 0 else ("Light Rainfall" if x < mean else "Heavy Rainfall"))
+        df2 = pd.DataFrame(columns=['Precipitation', 'Flow Rate', 'Water Level'])
+        df2['Precipitation'] = df['Precipitation'].apply(lambda x: "Dry" if x == 0 else ("Light Rainfall" if x < mean else "Heavy Rainfall"))
         df2['Flow Rate'] = df['Flow Rate'].apply(lambda x: "Slow" if x < bottomQuartileFlow else ("Steady" if x < topQuartileFlow else "Fast"))
         df2['Water Level'] = df['Water Level'].apply(lambda x: "Low" if x < bottomQuartileLevel else ("Medium" if x < topQuartileLevel else "High"))
 
@@ -210,7 +210,7 @@ class DataGenerator():
 if __name__ == "__main__":
 
     # Number of days to generate data for. Must be between 1 and 3125.
-    numberOfDays = 20
+    numberOfDays = 200
     samples = 96 * numberOfDays
     assert numberOfDays <= 3125 and numberOfDays > 0, "Number of days must be between 1 and 3125"
 
@@ -236,7 +236,6 @@ if __name__ == "__main__":
     all_flow_rates = []
     all_levels = []
 
-    # Generate the data. Look at the Final_Plan.ipynb notebook for more information.
     # tqdm is just used to get a loading bar in the terminal.
     print("3: Generating Data")
     for i in tqdm(range(numberOfDays)):
@@ -265,7 +264,9 @@ if __name__ == "__main__":
     dg = DataGenerator(numOfSamples=samples, rainfall=rainfall, predictors=predictor)
     dg.write_to_qtrhrl_csv(all_flow_rates, all_levels)
     dg.write_to_day_csv(all_flow_rates, all_levels)
-    print("5: Done")
-
-    dg.simplifyData("/home/iain/Desktop/IEL/Data/Generated Data/Quarter_Hourly_Generated_Data.csv", "/home/iain/Desktop/IEL/Data/Generated Data/Simplified Generated Data/Simplified_Quarter_Hourly_Data.csv")
-    dg.simplifyData("/home/iain/Desktop/IEL/Data/Generated Data/Daily_Generated_Data.csv", "/home/iain/Desktop/IEL/Data/Generated Data/Simplified Generated Data/Simplified_Daily_Data.csv")
+    
+    print("5: Creating Simplified Data")
+    dg.simplifyData("/home/iain/Desktop/IEL/Data/Generated Data/Quarter Hourly Generated Data.csv", "/home/iain/Desktop/IEL/Data/Generated Data/Simplified Generated Data/Simplified Quarter Hourly Data.csv")
+    dg.simplifyData("/home/iain/Desktop/IEL/Data/Generated Data/Daily Generated Data.csv", "/home/iain/Desktop/IEL/Data/Generated Data/Simplified Generated Data/Simplified Daily Data.csv")
+    
+    print("6: Done")
