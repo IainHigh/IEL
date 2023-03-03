@@ -3,10 +3,36 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 import math
+from numpy import dtype
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
+
+def getRainfallMultiplier(catchmentArea : float = 58.5):
+    # Convert the rainfall from mm to m3 for the whole region.
+    # 1000000 = convert km2 to m2
+    # 0.001 = convert mm to m
+    # catchmentArea = catchment area of rainfall which feeds into the river (km2) https://www2.sepa.org.uk/waterlevels/default.aspx?sd=t&lc=133077
+    # 0.73 = fraction of rainfall which feeds into the river https://www.gov.scot/publications/scotlands-marine-atlas-information-national-marine-plan/pages/7/
+    return 1000000 * 0.001 * catchmentArea * 0.73
+
+def calculateWaterAndLevelDifference(dataframe : dtype, daily : bool, catchmentArea : float = 58.5):
+    # dataframe : The dataframe to calculate the water and level difference for.
+    # daily : Whether the dataframe is the daily data or quarter-hourly data.
+
+    numberOfSeconds = 86400 if daily else 900
+    rainMultiplier = getRainfallMultiplier(catchmentArea)
+    
+    waterDifference = dataframe['Precipitation']*rainMultiplier - dataframe['Flow Rate']*numberOfSeconds
+    dataframe['Water Difference'] = waterDifference
+
+    # Calculate the level difference between the current sample and the next sample
+    dataframe['Level Difference'] = dataframe['Water Level'].diff()
+    dataframe['Level Difference'] = dataframe['Level Difference'].shift(-1)
+    dataframe.at[dataframe.index[-1], 'Level Difference'] = 0
+
+    return dataframe
 
 class Predictors:
     # This class will be used to store ML models and functions to generate data based on these models.
@@ -23,11 +49,11 @@ class Predictors:
     def setUpQuarterHourly(self):
         # Import the data
         flow = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter Hourly Flow Rate.csv', delimiter=';')
-        flow.rename(columns={'Value': 'Mean Flow (m3/s)'}, inplace=True)
+        flow.rename(columns={'Value': 'Flow Rate'}, inplace=True)
         rain = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter Hourly Precipitation.csv', delimiter=';')
-        rain.rename(columns={'Value': 'Precipitation (mm)'}, inplace=True)
+        rain.rename(columns={'Value': 'Precipitation'}, inplace=True)
         level = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Quater_Hourly_Readings/Quarter Hourly Level.csv', delimiter=';')
-        level.rename(columns={'Value': 'Water Level (m)'}, inplace=True)
+        level.rename(columns={'Value': 'Water Level'}, inplace=True)
 
         # Merge the data
         merged = pd.merge(flow, rain, on='#Timestamp')
@@ -42,11 +68,11 @@ class Predictors:
     def setUpDaily(self):
         # Import the new data and create a dataframe
         daily_flow = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily Mean Flow Rate.csv', delimiter=';')
-        daily_flow.rename(columns={'Value': 'Mean Flow (m3/s)'}, inplace=True)
+        daily_flow.rename(columns={'Value': 'Flow Rate'}, inplace=True)
         daily_rain = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily Precipitation.csv', delimiter=';')
-        daily_rain.rename(columns={'Value': 'Daily Precipitation (mm)'}, inplace=True)
+        daily_rain.rename(columns={'Value': 'Precipitation'}, inplace=True)
         daily_level = pd.read_csv('/home/iain/Desktop/IEL/Data/Real Data/Daily Aggregates/Daily Mean Level.csv', delimiter=';')
-        daily_level.rename(columns={'Value': 'Mean Water Level (m)'}, inplace=True)
+        daily_level.rename(columns={'Value': 'Water Level'}, inplace=True)
 
         # Merge the 3 datasets into one
         merged = pd.merge(daily_flow, daily_rain, on=['#Timestamp'])
@@ -56,30 +82,15 @@ class Predictors:
         merged = merged.drop('Quality Code', axis=1)
         merged.dropna(inplace=True)
         
-        merged['Water Difference (m3)'] = merged['Daily Precipitation (mm)']*40452 - merged['Mean Flow (m3/s)']*86400
-
-        # Calculate the level difference
-        levelDerivative = []
-        previous = merged['Mean Water Level (m)'][0]
-        flag = True
-        for i in merged['Mean Water Level (m)']:
-            diff = i - previous
-            if not flag:
-                levelDerivative.append(diff)
-            flag = False
-            previous = i
-        levelDerivative.append(0)
-        merged['level_derivative'] = levelDerivative
-
-        return merged
+        return calculateWaterAndLevelDifference(dataframe = merged, daily = True)
 
     def quarterHourlyFlowAgainstLevel(self, plotGraph = False, displayStats = False):
         # Use sklearn to fit a 3 degree polynomial curve to the water flow against water level data.
 
         # Only use water levels between 0.2 and 2
-        normalRange = self.qtrData[(self.qtrData['Water Level (m)'] > 0.2) & (self.qtrData['Water Level (m)'] < 2)]
-        X = normalRange['Water Level (m)'].values.reshape(-1, 1)
-        y = normalRange['Mean Flow (m3/s)'].values.reshape(-1, 1)
+        normalRange = self.qtrData[(self.qtrData['Water Level'] > 0.2) & (self.qtrData['Water Level'] < 2)]
+        X = normalRange['Water Level'].values.reshape(-1, 1)
+        y = normalRange['Flow Rate'].values.reshape(-1, 1)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
         quadratic = PolynomialFeatures(degree=3)
         X_quad = quadratic.fit_transform(X)
@@ -102,8 +113,8 @@ class Predictors:
         if plotGraph:
 
             # Plot the data points
-            X = self.qtrData['Water Level (m)'].values.reshape(-1, 1)
-            y = self.qtrData['Mean Flow (m3/s)'].values.reshape(-1, 1)
+            X = self.qtrData['Water Level'].values.reshape(-1, 1)
+            y = self.qtrData['Mean Flow'].values.reshape(-1, 1)
             plt.scatter(X, y, label='data points', color='lightgray', marker='.')
             
             # For low water levels, we will use a line
@@ -155,12 +166,12 @@ class Predictors:
         # Use sklearn to calculate the line of best fit for the water difference against the change in water level.
 
         # Remove days with water difference > 2000000 and > 2000000
-        typical = self.dailyData[self.dailyData['Water Difference (m3)'] < 2000000]
-        typical = typical[typical['Water Difference (m3)'] > -2000000]
+        typical = self.dailyData[self.dailyData['Water Difference'] < 2000000]
+        typical = typical[typical['Water Difference'] > -2000000]
 
         # Fit a polynomial curve of Water difference (independent) and level derivative (dependent)
-        X = typical['Water Difference (m3)'].values.reshape(-1, 1)
-        y = typical['level_derivative'].values.reshape(-1, 1)
+        X = typical['Water Difference'].values.reshape(-1, 1)
+        y = typical['Level Difference'].values.reshape(-1, 1)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
         quadratic = PolynomialFeatures(degree=1)
         X_quad = quadratic.fit_transform(X)

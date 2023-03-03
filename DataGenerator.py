@@ -3,11 +3,11 @@ import csv
 import pandas as pd
 import random
 from urllib.request import urlopen
-from DataGeneratorPredictors import Predictors
 from tqdm import tqdm
+import DataGeneratorPredictors
+from DataGeneratorPredictors import Predictors
 
 class DataGenerator():
-    
     def __init__(self,
                 numOfSamples : int = 100,                   # Number of quarter-hourly samples to generate data for
                 rainfall : list() = None,                   # List of rainfall values for each quarter-hourly sample (mm)
@@ -62,10 +62,9 @@ class DataGenerator():
         # Rainfall measured in mm
         # flowRate and volumeOfWaterComingFromDamn measured in m3/s
 
-        # 0.72 = percent of rainfall which feeds into the river; 1000000 = convert km2 to m2; 0.001 = convert mm to m.
-        # 900 = Number of seconds in 15 minutes.
-        rainMultiplier = 0.001 * 0.72 * self.catchementArea * 1000000
+        rainMultiplier = DataGeneratorPredictors.getRainfallMultiplier()
 
+        # 900 = Number of seconds in 15 minutes.
         return [(y*rainMultiplier + (x - z)*900) for x, y, z in zip(self.volumeOfWaterComingFromDamn, self.rainfall, flowRate)]
 
     def calculateDailyLevelDerivative(self, dailyWaterDifference, startingHeight):
