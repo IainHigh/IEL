@@ -210,7 +210,7 @@ class DataGenerator():
 if __name__ == "__main__":
 
     # Number of days to generate data for. Must be between 1 and 3125.
-    numberOfDays = 200
+    numberOfDays = 3125
     samples = 96 * numberOfDays
     assert numberOfDays <= 3125 and numberOfDays > 0, "Number of days must be between 1 and 3125"
 
