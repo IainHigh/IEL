@@ -15,7 +15,7 @@ def getRainfallMultiplier(catchmentArea : float = 58.5):
     # 0.001 = convert mm to m
     # catchmentArea = catchment area of rainfall which feeds into the river (km2) https://www2.sepa.org.uk/waterlevels/default.aspx?sd=t&lc=133077
     # 0.73 = fraction of rainfall which feeds into the river https://www.gov.scot/publications/scotlands-marine-atlas-information-national-marine-plan/pages/7/
-    return 1000000 * 0.001 * catchmentArea * 0.73
+    return 1000000 * 0.001 * catchmentArea * 0.76
 
 def calculateWaterAndLevelDifference(dataframe : dtype, daily : bool, catchmentArea : float = 58.5):
     # dataframe : The dataframe to calculate the water and level difference for.
