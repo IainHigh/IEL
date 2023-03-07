@@ -39,7 +39,6 @@ class DataGenerator():
         else:
             self.predictors = predictors
 
-        
     def calculate_quarter_hourly_flow_rate(self, quarterHourlyLevels = None):
         # Calculate the flow rate for each quarter-hourly sample.
         # If the levels are provided then use them for more accurate calculations.
@@ -79,7 +78,6 @@ class DataGenerator():
 
     def calculateQuarterHourlyLevelDifference(self, dailyLevelDifference, quarterHourlyWaterDifference):
         quarter_hourly_water_difference = [0.0] * len(quarterHourlyWaterDifference)
-        temp = dailyLevelDifference / len(quarterHourlyWaterDifference)
         totalWaterDifference = sum(quarterHourlyWaterDifference)
         for i in range(len(quarterHourlyWaterDifference)):
             ratio = quarterHourlyWaterDifference[i] / totalWaterDifference
